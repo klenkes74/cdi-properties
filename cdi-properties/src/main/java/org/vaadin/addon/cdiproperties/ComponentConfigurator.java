@@ -1,14 +1,5 @@
 package org.vaadin.addon.cdiproperties;
 
-import com.vaadin.server.Sizeable;
-import com.vaadin.shared.ui.MarginInfo;
-import com.vaadin.ui.*;
-
-import javax.enterprise.context.SessionScoped;
-import javax.enterprise.inject.Instance;
-import javax.enterprise.inject.UnsatisfiedResolutionException;
-import javax.enterprise.inject.spi.InjectionPoint;
-import javax.inject.Inject;
 import java.beans.BeanInfo;
 import java.beans.IntrospectionException;
 import java.beans.Introspector;
@@ -20,15 +11,29 @@ import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Iterator;
 
+import javax.enterprise.context.SessionScoped;
+import javax.enterprise.inject.Instance;
+import javax.enterprise.inject.UnsatisfiedResolutionException;
+import javax.enterprise.inject.spi.InjectionPoint;
+import javax.inject.Inject;
+
+import com.vaadin.flow.component.Component;
+import com.vaadin.flow.component.HasSize;
+import com.vaadin.flow.component.HasStyle;
+import com.vaadin.flow.component.HtmlComponent;
+import com.vaadin.flow.component.Text;
+
 
 @SuppressWarnings("serial")
 @SessionScoped
 public class ComponentConfigurator implements Serializable {
 
     public final static String IGNORED_STRING = "CDI_PROPERTIES_IGNORE";
+
     @Inject
     private Instance<CustomProperty> customProperties;
 
+    
     private static Annotation getPropertyAnnotation(InjectionPoint ip,
             Class annotationClass) {
         Annotation result = null;
@@ -45,22 +50,14 @@ public class ComponentConfigurator implements Serializable {
         Object result = null;
         try {
             result = instance.getClass().getMethod(methodName).invoke(instance);
-        } catch (IllegalArgumentException e) {
-            e.printStackTrace();
-        } catch (SecurityException e) {
-            e.printStackTrace();
-        } catch (IllegalAccessException e) {
-            e.printStackTrace();
-        } catch (InvocationTargetException e) {
-            e.printStackTrace();
-        } catch (NoSuchMethodException e) {
+        } catch (IllegalArgumentException | SecurityException | IllegalAccessException | NoSuchMethodException
+                | InvocationTargetException e) {
             e.printStackTrace();
         }
         return result;
     }
 
-    private static void applyProperties(Component component,
-                                        Annotation propertyAnnotation) {
+    private static void applyProperties(Component component, Annotation propertyAnnotation) {
         try {
             final BeanInfo bi = Introspector.getBeanInfo(component.getClass());
             HashMap<String, Method> methods = new HashMap<>(bi.getPropertyDescriptors().length);
@@ -89,9 +86,8 @@ public class ComponentConfigurator implements Serializable {
             throws InstantiationException, IllegalAccessException {
         Annotation propertyAnnotation = getPropertyAnnotation(ip,
                 annotationClass);
-        Class<T> componentClass = (Class) getPropertyValue(propertyAnnotation,
-                "implementation");
-        Component component = componentClass.newInstance();
+        Class<T> componentClass = (Class<T>) getPropertyValue(propertyAnnotation, "implementation");
+        T component = componentClass.newInstance();
 
         // Apply the setters
         applyProperties(component, propertyAnnotation);
@@ -105,7 +101,7 @@ public class ComponentConfigurator implements Serializable {
             }
         }
 
-        return (T) component;
+        return component;
     }
 
     public static abstract class CustomProperty {
@@ -117,38 +113,26 @@ public class ComponentConfigurator implements Serializable {
     private static class CustomPropertySize extends CustomProperty {
         @Override
         void apply(Component component, Annotation propertyAnnotation) {
-            Boolean sizeFull = (Boolean) getPropertyValue(propertyAnnotation,
-                    "sizeFull");
-            Boolean sizeUndefined = (Boolean) getPropertyValue(
-                    propertyAnnotation, "sizeUndefined");
+            Boolean sizeFull = (Boolean) getPropertyValue(propertyAnnotation, "sizeFull");
+            Boolean sizeUndefined = (Boolean) getPropertyValue(propertyAnnotation, "sizeUndefined");
 
-            if (sizeFull) {
-                component.setSizeFull();
-            } else if (sizeUndefined) {
-                component.setSizeUndefined();
-            } else {
-                String height = (String) getPropertyValue(propertyAnnotation,
-                        "height");
-                if (!IGNORED_STRING.equals(height)) {
-                    component.setHeight(height);
-                } else {
-                    Float heightValue = (Float) getPropertyValue(
-                            propertyAnnotation, "heightValue");
-                    Sizeable.Unit unit = (Sizeable.Unit) getPropertyValue(
-                            propertyAnnotation, "heightUnits");
-                    component.setHeight(heightValue, unit);
-                }
+            if (component instanceof HasSize) {
+                HasSize hc = (HasSize) component;
 
-                String width = (String) getPropertyValue(propertyAnnotation,
-                        "width");
-                if (!IGNORED_STRING.equals(width)) {
-                    component.setWidth(width);
+                if (sizeFull) {
+                    hc.setSizeFull();
+                } else if (sizeUndefined) {
+                    hc.setSizeUndefined();
                 } else {
-                    Float widthValue = (Float) getPropertyValue(
-                            propertyAnnotation, "widthValue");
-                    Sizeable.Unit unit = (Sizeable.Unit) getPropertyValue(
-                            propertyAnnotation, "widthUnits");
-                    component.setWidth(widthValue, unit);
+                    String height = (String) getPropertyValue(propertyAnnotation, "height");
+                    if (!IGNORED_STRING.equals(height)) {
+                        hc.setHeight(height);
+                    }
+
+                    String width = (String) getPropertyValue(propertyAnnotation, "width");
+                    if (!IGNORED_STRING.equals(width)) {
+                        hc.setWidth(width);
+                    }
                 }
             }
         }
@@ -167,20 +151,18 @@ public class ComponentConfigurator implements Serializable {
 
         @Override
         void apply(Component component, Annotation propertyAnnotation) {
-            final String captionKey = (String) getPropertyValue(
-                    propertyAnnotation, "captionKey");
-            final Boolean localized = (Boolean) getPropertyValue(
-                    propertyAnnotation, "localized");
+            final String captionKey = (String) getPropertyValue(propertyAnnotation, "captionKey");
+            final Boolean localized = (Boolean) getPropertyValue(propertyAnnotation, "localized");
+
             if (!IGNORED_STRING.equals(captionKey)) {
                 try {
-                    component.setCaption(textBundle.get().getText(captionKey));
+                    ((HtmlComponent) component).setTitle(textBundle.get().getText(captionKey));
                     if (localized) {
-                        localizer.get().addLocalizedCaption(component,
-                                captionKey);
+                        localizer.get().addLocalizedCaption((HtmlComponent)component, captionKey);
 
                     }
                 } catch (final UnsatisfiedResolutionException e) {
-                    component.setCaption("No TextBundle implementation found!");
+                    ((HtmlComponent) component).setTitle("No TextBundle implementation found!");
                 }
 
             }
@@ -192,78 +174,12 @@ public class ComponentConfigurator implements Serializable {
         }
     }
 
-    private static class CustomPropertyDescriptionKey extends CustomProperty {
-        @Inject
-        private Instance<TextBundle> textBundle;
-        @Inject
-        private Instance<Localizer> localizer;
-
-        @Override
-        void apply(Component component, Annotation propertyAnnotation) {
-            final String descriptionKey = (String) getPropertyValue(
-                    propertyAnnotation, "descriptionKey");
-            final Boolean localized = (Boolean) getPropertyValue(
-                    propertyAnnotation, "localized");
-            if (!IGNORED_STRING.equals(descriptionKey)) {
-                AbstractComponent field = (AbstractComponent) component;
-                try {
-                    field.setDescription(textBundle.get().getText(descriptionKey));
-                    if (localized) {
-                        localizer.get().addLocalizedDescription(field,
-                                                            descriptionKey);
-                    }
-                } catch (final UnsatisfiedResolutionException e) {
-                    field.setDescription("No TextBundle implementation found!");
-                }
-
-            }
-        }
-
-        @Override
-        boolean appliesTo(Component component) {
-            return (component instanceof AbstractComponent);
-        }
-    }
-
-    private static class CustomPropertyMargin extends CustomProperty {
-        @Override
-        void apply(Component component, Annotation propertyAnnotation) {
-            MarginInfo mi = null;
-            final boolean[] margin = (boolean[]) getPropertyValue(
-                    propertyAnnotation, "margin");
-            if (margin.length == 1) {
-                mi = new MarginInfo(margin[0]);
-            } else if (margin.length == 2) {
-                mi = new MarginInfo(margin[0], margin[1], margin[0], margin[1]);
-            } else if (margin.length == 3) {
-                mi = new MarginInfo(margin[0], margin[1], margin[2], margin[1]);
-            } else if (margin.length == 4) {
-                mi = new MarginInfo(margin[0], margin[1], margin[2], margin[3]);
-            }
-
-            if (mi != null) {
-                if (component instanceof AbstractOrderedLayout) {
-                    ((AbstractOrderedLayout) component).setMargin(mi);
-                } else if (component instanceof GridLayout) {
-                    ((GridLayout) component).setMargin(mi);
-                }
-            }
-        }
-
-        @Override
-        boolean appliesTo(Component component) {
-            return component instanceof AbstractOrderedLayout
-                    || component instanceof GridLayout;
-        }
-    }
-
     private static class CustomPropertyStyleName extends CustomProperty {
         @Override
         void apply(Component component, Annotation propertyAnnotation) {
-            final String[] styleNames = (String[]) getPropertyValue(
-                    propertyAnnotation, "styleName");
+            final String[] styleNames = (String[]) getPropertyValue(propertyAnnotation, "styleName");
             for (String styleName : styleNames) {
-                component.addStyleName(styleName);
+                ((HasStyle) component).setClassName(styleName);
                 ;
             }
         }
@@ -282,20 +198,16 @@ public class ComponentConfigurator implements Serializable {
 
         @Override
         void apply(Component component, Annotation propertyAnnotation) {
-            final String valueKey = (String) getPropertyValue(
-                    propertyAnnotation, "valueKey");
+            final String valueKey = (String) getPropertyValue(propertyAnnotation, "valueKey");
             if (!IGNORED_STRING.equals(valueKey)) {
                 try {
-                    ((Label) component).setValue(textBundle.get().getText(
-                            valueKey));
-                    final Boolean localized = (Boolean) getPropertyValue(
-                            propertyAnnotation, "localized");
+                    ((Text) component).setText(textBundle.get().getText(valueKey));
+                    final Boolean localized = (Boolean) getPropertyValue(propertyAnnotation, "localized");
                     if (localized) {
-                        localizer.get().addLocalizedLabelValue(
-                                (Label) component, valueKey);
+                        localizer.get().addLocalizedCaption((HtmlComponent) component, valueKey);
                     }
                 } catch (final UnsatisfiedResolutionException e) {
-                    component.setCaption("No TextBundle implementation found!");
+                    ((Text) component).setText("No TextBundle implementation found!");
                 }
 
             }
@@ -303,7 +215,7 @@ public class ComponentConfigurator implements Serializable {
 
         @Override
         boolean appliesTo(Component component) {
-            return component instanceof Label;
+            return component instanceof Text;
         }
     }
 }

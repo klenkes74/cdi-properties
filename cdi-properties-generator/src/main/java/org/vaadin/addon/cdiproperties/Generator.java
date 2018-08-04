@@ -7,7 +7,6 @@ import java.beans.PropertyDescriptor;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -18,25 +17,14 @@ import java.util.Set;
 
 import com.openpojo.reflection.PojoClass;
 import com.openpojo.reflection.impl.PojoClassFactory;
-import com.vaadin.ui.AbstractComponent;
-import com.vaadin.ui.AbstractOrderedLayout;
-import com.vaadin.ui.Component;
-import com.vaadin.ui.GridLayout;
-import com.vaadin.ui.Label;
-import com.vaadin.ui.LegacyWindow;
-import com.vaadin.ui.LoginForm;
-import com.vaadin.ui.TextField;
-import com.vaadin.ui.components.colorpicker.ColorPickerGrid;
-import com.vaadin.ui.components.colorpicker.ColorPickerHistory;
-import com.vaadin.ui.components.colorpicker.ColorPickerSelect;
+import com.vaadin.flow.component.Component;
+import com.vaadin.flow.component.HtmlComponent;
 import org.vaadin.addon.cdiproperties.Generator.ComponentModel.ComponentProperty;
 
 class Sets {
     static <T> Set<T> newHashSet(T ... classes) {
         HashSet<T> result = new HashSet<T>(classes.length);
-        for (T c : classes) {
-            result.add(c);
-        }
+        Collections.addAll(result, classes);
 
         return result;
     }
@@ -52,10 +40,7 @@ class Lists {
 
 class Generator {
 
-    private static Set<Class<? extends AbstractComponent>> excludedClasses = Sets
-            .newHashSet(ColorPickerGrid.class, ColorPickerHistory.class,
-                    ColorPickerSelect.class, LegacyWindow.class,
-                    LoginForm.class);
+    private static Set<Class<? extends HtmlComponent>> excludedClasses = Sets.newHashSet();
     private static Set<String> excludedProperties = Sets.newHashSet("UI",
             "componentError", "connectorEnabled", "connectorId", "width",
             "height", "stateType", "type", "styleName", "timeFormat");
@@ -70,7 +55,7 @@ class Generator {
         Set<ComponentModel> componentModels = Sets.newHashSet();
 
         for (PojoClass pojoClass : PojoClassFactory
-                .enumerateClassesByExtendingType("com.vaadin.ui",
+                .enumerateClassesByExtendingType("com.vaadin.flow",
                         Component.class, null)) {
             if ((pojoClass.isConcrete())
                     && !excludedClasses.contains(pojoClass.getClazz())) {
@@ -159,17 +144,11 @@ class Generator {
 
         Component component = (Component) implementation;
 
-        result.add(new ComponentProperty("float", "widthValue",
-                formatDefaultValue(component.getWidth())));
-        result.add(new ComponentProperty("float", "heightValue",
-                formatDefaultValue(component.getHeight())));
-
-        result.add(new ComponentProperty("com.vaadin.server.Sizeable.Unit",
-                "widthUnits", "com.vaadin.server.Sizeable.Unit."
-                        + component.getWidthUnits().name()));
-        result.add(new ComponentProperty("com.vaadin.server.Sizeable.Unit",
-                "heightUnits", "com.vaadin.server.Sizeable.Unit."
-                        + component.getHeightUnits().name()));
+        if (component instanceof HtmlComponent) {
+            HtmlComponent c = (HtmlComponent) component;
+            result.add(new ComponentProperty("float", "widthValue", formatDefaultValue(c.getWidth())));
+            result.add(new ComponentProperty("float", "heightValue", formatDefaultValue(c.getHeight())));
+        }
 
         result.add(new ComponentProperty("String", "width",
                 "org.vaadin.addon.cdiproperties.ComponentConfigurator.IGNORED_STRING"));
@@ -189,18 +168,8 @@ class Generator {
 
         result.add(new ComponentProperty("String[]", "styleName", "{}"));
 
-        if (implementation instanceof AbstractOrderedLayout
-                || implementation instanceof GridLayout) {
-            result.add(new ComponentProperty("boolean[]", "margin", "{}"));
-        }
-
-        if (implementation instanceof Label) {
-            result.add(new ComponentProperty("String", "valueKey",
-                    "org.vaadin.addon.cdiproperties.ComponentConfigurator.IGNORED_STRING"));
-        }
-
-        if (implementation instanceof AbstractComponent) {
-            result.add(new ComponentProperty("String", "descriptionKey",
+        if (implementation instanceof com.vaadin.flow.component.Text) {
+            result.add(new ComponentProperty("String", "text",
                     "org.vaadin.addon.cdiproperties.ComponentConfigurator.IGNORED_STRING"));
         }
 
@@ -273,8 +242,7 @@ class Generator {
         Object instance = null;
         try {
             instance = pojoClass.getClazz().newInstance();
-        } catch (InstantiationException e) {
-        } catch (IllegalAccessException e) {
+        } catch (InstantiationException | IllegalAccessException e) {
         }
         return instance;
     }
@@ -334,7 +302,7 @@ class Generator {
         }
 
         public String formatAnnotationClassName() {
-            return (componentClass == AbstractComponent.class ? ""
+            return (componentClass == HtmlComponent.class ? ""
                     : componentClass.getSimpleName()) + "Properties";
         }
 
